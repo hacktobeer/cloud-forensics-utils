@@ -515,6 +515,20 @@ class GoogleComputeInstance(compute_base_resource.GoogleComputeBaseResource):
     response = request.execute()  # type: Dict[str, Any]
     return response
 
+  def GetPublicIPAddress(self) -> List[str]:
+    """Get the public IP address of the virtual machine.
+
+    Returns:
+      str: The public IP address.
+    """
+    pub_ips = []
+    for interface in self.GetValue('networkInterfaces'):
+      for accessconf in interface['accessConfigs']:
+        if 'natIP' in accessconf:
+          pub_ips.append(accessconf['natIP'])
+
+    return pub_ips
+
   def GetBootDisk(self) -> Union['GoogleComputeDisk', None]:
     """Get the virtual machine boot disk.
 

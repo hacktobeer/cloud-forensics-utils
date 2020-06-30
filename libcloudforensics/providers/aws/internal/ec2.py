@@ -58,6 +58,20 @@ class AWSInstance:
     self.availability_zone = availability_zone
     self.name = name
 
+  def GetPublicIPAddress(self) -> str:
+    """Get the public IP address of the instance.
+
+    Returns:
+      str: The assigned to the instance.
+    """
+
+    public_ip_address = self.aws_account.ResourceApi(
+        common.EC2_SERVICE).Instance(
+            self.instance_id).public_ip_address # type: str
+
+    return public_ip_address
+
+
   def GetBootVolume(self) -> 'ebs.AWSVolume':
     """Get the instance's boot volume.
 

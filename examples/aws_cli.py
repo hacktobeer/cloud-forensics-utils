@@ -43,7 +43,10 @@ def ListInstances(args: 'argparse.Namespace') -> None:
   print('Instances found:')
   for instance in instances:
     boot_volume = instances[instance].GetBootVolume().volume_id
-    print('Name: {0:s}, Boot volume: {1:s}'.format(instance, boot_volume))
+    public_ip_address = instances[instance].GetPublicIPAddress()
+    print('Name: {0:s}, Boot volume: {1:s}, Public IP: {2:s}'.format(instance,
+                                                                     boot_volume,
+                                                                     public_ip_address))
 
 
 def ListVolumes(args: 'argparse.Namespace') -> None:
@@ -145,9 +148,11 @@ def StartAnalysisVm(args: 'argparse.Namespace') -> None:
                                  attach_volumes=attach_volumes)
 
   print('Analysis VM started.')
-  print('Name: {0:s}, Started: {1:s}, Region: {2:s}'.format(vm[0].name,
-                                                            str(vm[1]),
-                                                            vm[0].region))
+  print('Name: {0:s}, Started: {1:s}, '
+        'Region: {2:s}, Public IP: {3:s}'.format(vm[0].name,
+                                                 str(vm[1]),
+                                                 vm[0].region,
+                                                 vm[0].GetPublicIPAddress()))
 
 def ListImages(args: 'argparse.Namespace') -> None:
   """List AMI images and filter on AMI image 'name'.

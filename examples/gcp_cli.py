@@ -41,8 +41,12 @@ def ListInstances(args: 'argparse.Namespace') -> None:
   print('Instances found:')
   for instance in instances:
     bootdisk = instances[instance].GetBootDisk()
+    public_ip_address = instances[instance].GetPublicIPAddress()
     if bootdisk:
-      print('Name: {0:s}, Bootdisk: {1:s}'.format(instance, bootdisk.name))
+      print('Name: {0:s}, Bootdisk: {1:s}, '
+            'Public IPs: {2:s}'.format(instance,
+                                       bootdisk.name,
+                                       str(public_ip_address)))
 
 
 def ListDisks(args: 'argparse.Namespace') -> None:
@@ -127,7 +131,10 @@ def StartAnalysisVm(args: 'argparse.Namespace') -> None:
                                  attach_disks=attach_disks)
 
   print('Analysis VM started.')
-  print('Name: {0:s}, Started: {1:s}'.format(vm[0].name, str(vm[1])))
+  print('Name: {0:s}, Started: {1:s} '
+        'Public IPs: {2:s}'.format(vm[0].name,
+                                   str(vm[1]),
+                                   str(vm[0].GetPublicIPAddress())))
 
 
 def ListServices(args: 'argparse.Namespace') -> None:
