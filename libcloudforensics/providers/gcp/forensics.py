@@ -68,10 +68,6 @@ def CreateDiskCopy(
     ValueError: If both instance_name and disk_name are missing.
   """
 
-  if not instance_name and not disk_name:
-    raise ValueError(
-        'You must specify at least one of [instance_name, disk_name].')
-
   src_project = gcp_project.GoogleCloudProject(src_proj)
   dst_project = gcp_project.GoogleCloudProject(dst_proj, default_zone=zone)
 
@@ -81,6 +77,9 @@ def CreateDiskCopy(
     elif instance_name:
       instance = src_project.compute.GetInstance(instance_name)
       disk_to_copy = instance.GetBootDisk()
+    else:
+      raise ValueError(
+          'You must specify at least one of [instance_name, disk_name].')
 
     if not disk_type:
       disk_type = disk_to_copy.GetDiskType()
@@ -250,6 +249,50 @@ def CreateDiskFromGCSImage(
       'md5Hash': md5_hash_hex
   }
   return result
+
+
+def CopyDisksToGCS(source_project: str,
+                   source_disk: str,
+                   destination_bucket: str,
+                   destination_directory: str,
+                   image_format: str) -> str:
+  """Given a VM, copy the disks to a GCS bucket.
+
+  Args:
+    source_project: The project containing the disk to copy
+    source_disk: The name of the disk to copy
+    destination_bucket: The destination bucket to store the disk copy
+    destination_directory: The directory in the bucket in which to store the
+        disk image
+    image_format: The image format to use. Supported formats documented at
+        https://github.com/GoogleCloudPlatform/compute-image-import/blob/edee48bddbe159100da9ad961131a4beb0f12158/cli_tools/gce_vm_image_export/README.md?plain=1#L3
+  """
+  try:
+    src_project = gcp_project.GoogleCloudProject(source_project)
+    disk_to_copy = src_project.compute.GetDisk(source_disk)
+    copied_image = src_project.compute.CreateImageFromDisk(disk_to_copy)
+    return copied_image.ExportImage(
+        gcs_output_folder=f'gs://{destination_bucket}/{destination_directory}',
+        image_format=image_format,
+        output_name=disk_to_copy.name)
+  except (RefreshError, DefaultCredentialsError) as exception:
+    raise errors.CredentialsConfigurationError(
+        'Something is wrong with your Application Default Credentials. Try '
+        'running: $ gcloud auth application-default login: {0!s}'.format(
+            exception),
+        __name__) from exception
+  except HttpError as exception:
+    if exception.resp.status == 403:
+      raise errors.CredentialsConfigurationError(
+          'Make sure you have the appropriate permissions on the project: '
+          '{0!s}'.format(exception),
+          __name__) from exception
+    if exception.resp.status == 404:
+      raise errors.ResourceNotFoundError(
+          'GCP resource not found. Maybe a typo in the project / instance / '
+          'disk name?',
+          __name__) from exception
+    raise RuntimeError(exception) from exception
 
 
 def AddDenyAllFirewallRules(
@@ -669,19 +712,13 @@ def TriageInstance(project_id: str, instance_name: str) -> Dict[str, Any]:
 
   cpu_usage = project.monitoring.GetCpuUsage(
       instance_ids=[instance_info['id']], aggregation_minutes=1)
-  if cpu_usage:
-    parsed_cpu = cpu_usage[0].get('cpu_usage', [])
+  parsed_cpu = cpu_usage[0].get('cpu_usage', []) if cpu_usage else None
 
 
   gce_gpu_usage = project.monitoring.GetInstanceGPUUsage(
-    instance_ids=[instance_info['id']])
-  if gce_gpu_usage:
-    parsed_gce_gpu = gce_gpu_usage
-
+      instance_ids=[instance_info['id']])
 
   gke_gpu_usage = project.monitoring.GetNodeAccelUsage()
-  if gke_gpu_usage:
-    parsed_gke_gpu = gke_gpu_usage
 
   instance_triage = {
       'instance_info': {
@@ -697,25 +734,25 @@ def TriageInstance(project_id: str, instance_name: str) -> Dict[str, Any]:
           'data_type': 'service_accounts',
           'values': instance_info['serviceAccounts']
       },
-                      {
-                          'data_type': 'firewalls',
-                          'values': instance.GetNormalisedFirewalls()
-                      }, {
-                          'data_type': 'cpu_usage', 'values': parsed_cpu
-                      }, {
-                          'data_type': 'gce_gpu_usage', 'values': parsed_gce_gpu
-                      }, {
-                          'data_type': 'gke_gpu_usage', 'values': parsed_gke_gpu
-                      }, {
-                          'data_type':
-                              'ssh_auth',
-                          'values':
-                              CheckInstanceSSHAuth(
-                                  project_id, instance_info['name'])
-                      }, {
-                          'data_type': 'active_services',
-                          'values': parsed_services
-                      }]
+      {
+          'data_type': 'firewalls',
+          'values': instance.GetNormalisedFirewalls()
+      }, {
+          'data_type': 'cpu_usage', 'values': parsed_cpu
+      }, {
+          'data_type': 'gce_gpu_usage', 'values': gce_gpu_usage
+      }, {
+          'data_type': 'gke_gpu_usage', 'values': gke_gpu_usage
+      }, {
+          'data_type':
+              'ssh_auth',
+          'values':
+              CheckInstanceSSHAuth(
+                  project_id, instance_info['name'])
+      }, {
+          'data_type': 'active_services',
+          'values': parsed_services
+      }]
   }
 
   return instance_triage
